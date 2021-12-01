@@ -1,0 +1,607 @@
+\documentclass[UTF8,lualatex]{ctexbeamer}
+\usepackage{graphbox}
+\usepackage{tabu}
+\usepackage{amsmath}
+\usepackage{algorithmicx}
+\usepackage[noend]{algpseudocode}
+
+\usetheme{Frankfurt}
+\setbeamertemplate{note page}[plain]
+% $BEAMER_NOTES
+
+\title{\kaishu Placement Using Efficient 2-D Compaction}
+    \author{Ping-San Tzeng\\
+        slided by 陶大}
+    \date{2021-11-19}
+
+\newcommand{\hpwl}{\text{HPWL}}
+\newcommand{\nets}{\text{nets}}
+\newcommand{\cells}{\text{cells}}
+\newcommand{\edges}{\text{edges}}
+\newcommand{\pads}{\text{pads}}
+
+
+\begin{document}
+\songti
+    
+\begin{frame}
+\titlepage
+\end{frame}
+
+\section{The Problem}
+
+\begin{frame}
+    \frametitle{VLSI Placement Problem}
+
+    \begin{alertblock}{问题}
+        \begin{itemize}
+            \item 非常多的cells (e.g., $10^{10}$)
+            \item route尽可能短的线/塞进非常小的面积
+            \item 算法尽可能地快
+        \end{itemize}
+    \end{alertblock}
+    \begin{exampleblock}{之前产业界的做法：std cells排成行}
+        \begin{center}
+            \includegraphics[width=0.5\textwidth]{../../pics/integrated-placement-and-routing-for-vlsi-layout-synthesis-and-optimization/stdcell_row.png}
+        \end{center}
+    \end{exampleblock}
+\end{frame}
+
+\begin{frame}
+    \frametitle{VLSI Placement Problem}
+
+    \begin{alertblock}{新的问题：macro cells}
+        \begin{center}
+            \includegraphics[width=0.5\textwidth]{../../pics/integrated-placement-and-routing-for-vlsi-layout-synthesis-and-optimization/macro_cells_placement.png}
+            \\
+            排成行的macro cells太废面积
+        \end{center}
+    \end{alertblock}
+    \begin{block}{~}
+        需要真正的2D placement algorithm
+    \end{block}
+\end{frame}
+
+\begin{frame}
+    \frametitle{VLSI Placement Problem}
+    \begin{block}{2D Placement}
+        \[
+            \min\sum_{i\in\nets} \hpwl(i)
+        \]
+        s.t., $\forall i,j\in\cells$,
+        \begin{align*}
+            \left|x_i - x_j\right| &\geqslant \frac{w_i + w_j}{2} \qquad\text{or}\\
+            \left|y_i - y_j\right| &\geqslant \frac{h_i + h_j}{2}
+        \end{align*}
+    \end{block}
+    \begin{alertblock}{~}
+        然而解得太慢\dots
+    \end{alertblock}
+\end{frame}
+
+\note{
+    \begin{itemize}
+        \item 对于cell i,
+            \begin{itemize}
+                \item $(x_i, y_i)$是cell中心的坐标
+                \item $w_i$/$h_i$是其宽度/高度
+            \end{itemize}
+        \item HPWL(half-perimeter wire length)本身已经是对问题的简化了。
+            HPWL是真实线长的下限。
+    \end{itemize}
+}
+
+\section{The Algorithm}
+
+\begin{frame}
+    \frametitle{品山的算法}
+    
+    \begin{block}{整体框架}
+        \begin{enumerate}
+            \item 粗放
+                \begin{enumerate}
+                    \item Gauss-Seidel method on simple quadratic cost
+                    \item 2D compaction based on RULD graph
+                \end{enumerate}
+            \item 细调
+                \begin{enumerate}
+                    \item 考虑cell的几何形状
+                        \begin{enumerate}
+                            \item cell shifting
+                            \item cell orientation
+                        \end{enumerate}
+                    \item 2D compaction based on RULD graph
+                \end{enumerate}
+            \item 精修
+                \begin{enumerate}
+                    \item 精修HPWL
+                    \item 2D compaction based on RULD graph
+                \end{enumerate}
+        \end{enumerate}
+    \end{block}
+\end{frame}
+
+\note{
+    \begin{itemize}
+        \item 每一个步骤都可能导致overlapping。
+            所以最后都用2D compaction修一修。
+        \item 这里要讲四个算法，依次是2D compaction、initial placement、1st refinement、2nd refinement。
+    \end{itemize}
+}
+
+\subsection{Compaction}
+
+\begin{frame}
+    \frametitle{Compaction}
+
+    \begin{block}{The target and the Name}
+        \begin{itemize}
+            \item 给定任意一个placement，拍拍紧；如果有重叠，撑撑开。
+                \begin{center}
+                    \begin{tabu}{lcr}
+                        \includegraphics[align=c,width=.3\textwidth]{../../pics/integrated-placement-and-routing-for-vlsi-layout-synthesis-and-optimization/compaction-1.png}
+                        &$\Longrightarrow$
+                        &\includegraphics[align=c,width=.15\textwidth]{../../pics/integrated-placement-and-routing-for-vlsi-layout-synthesis-and-optimization/compaction-ruld.png}
+                    \end{tabu}
+                \end{center}
+            \item 直觉：横里俄罗斯方块，竖里俄罗斯方块。
+                \pause
+                \begin{center}
+                    \begin{tabu}{lr}
+                        \includegraphics[align=c,width=.2\textwidth]{../../pics/integrated-placement-and-routing-for-vlsi-layout-synthesis-and-optimization/compaction-1d.png}
+                        &\Large 不行
+                    \end{tabu}
+                \end{center}
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Compaction}
+    
+    \begin{block}{RULD Graph}
+        拍紧的同时保持cells之间的\textbf{相对位置}。
+        \begin{itemize}
+            \item 从任何一个cell(的中心)看出去，周围的cell的角顺序不变。
+            \item 任何两个cell直观上的上下、左右关系不变。
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Compaction}
+    
+    \begin{exampleblock}{RULD Graph}
+        \begin{center}
+            \includegraphics[width=.5\textwidth]{../../pics/integrated-placement-and-routing-for-vlsi-layout-synthesis-and-optimization/ruld-graph.png}
+        \end{center}
+        \begin{itemize}
+            \item 每个cell变成一个node。后者的坐标是前者的中心。
+            \item 四方边界点
+            \item 平面被切割成许多个小三角形 (triangulation)
+            \item 除了四方边界点之间，其他边都被赋予\textbf{垂直}或\textbf{水平}的属性。
+            \item 每个node都有四向边(legal constraint)。
+        \end{itemize}
+    \end{exampleblock}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Compaction}
+
+    \begin{theorem}
+        满足以下条件的(合法)RULD图不会有重叠的cells。
+        \begin{itemize}
+            \item explicit constraints 
+                \begin{align*}
+                    \left|x_i-x_j\right|\geqslant\frac{w_i+w_j}{2} &&\forall i,j\in\cells\text{~被一条水平线连接}
+                \end{align*}
+            \item implicit constraints (猜的)：
+                \\
+                对于任意一条垂直边的两端$p,q$，$i$是$p$的右节点，$j$是$q$的左节点，则
+                \begin{align*}
+                    x_i - x_j \geqslant \frac{w_i + w_j}{2}
+                \end{align*}
+        \end{itemize}
+    \end{theorem}
+\end{frame}
+
+\note{
+    \begin{itemize}
+        \item 还有垂直方向，类似。不赘述。
+        \item implicit constraints看了三遍，没get到。
+            需要查看更多文献。
+        \item 证明的大致思路：以水平方向为例，任意两个cells，以下二者必居其一：
+            \begin{enumerate}
+                \item 要么他俩同处一条从左边界到右边界由水平边连成的路径上；
+                \item 要么他俩分处一条从上边界到下边界由垂直边连成的路径的两边。
+            \end{enumerate}
+        \item 在该定理的基础上就可以构建使任何placement合法化的算法：
+            在构建完RULD graph之后，抛弃所有cells的原有坐标，在explicit/implicit constraints下重建各个cells的坐标。
+    \end{itemize}
+}
+
+\begin{frame}
+    \frametitle{RULD Graph的构建}
+    
+    \begin{block}{Triangulation}
+        \begin{enumerate}
+            \item 随便建一个triangulation graph
+            \item 每一条边换一换，如果以下目标能改善，则保留。
+        \end{enumerate}
+        \begin{columns}
+            \begin{column}{0.2\textwidth}
+                \includegraphics[height=0.5\textheight,width=\textwidth]{../../pics/integrated-placement-and-routing-for-vlsi-layout-synthesis-and-optimization/edge-swapping.png}
+            \end{column}
+            \begin{column}{0.74\textwidth}
+                \small
+                \begin{align*}
+                    &\min\sum_{(i,j)\in\edges} X_\text{adj}^2(i,j) + Y_\text{adj}^2(i,j)
+                    \\
+                    X_\text{adj}&=\begin{cases}
+                        \frac{2\left|x_i-x_j\right|}{w_i+w_j}    &\text{if }\left|x_i-x_j\right|\leqslant\frac{w_i+w_j}{2}\\
+                        \left|x_i-x_j\right|-\frac{w_i+w_j}{2}+1    &\text{otherwise}
+                    \end{cases}
+                \end{align*}
+            \end{column}
+        \end{columns}
+    \end{block}
+\end{frame}
+
+\note{
+    \begin{itemize}
+        \item 初始建triangulation graph的过程：
+            \begin{enumerate}
+                \item 四方点先放好。左右连起来。
+                \item 每次丢进去一个节点：找到该点的包围三角形，分别连三条边。
+            \end{enumerate}
+        \item 不理解otherwise部分为什么不直接除。
+    \end{itemize}
+}
+
+\begin{frame}
+    \frametitle{RULD Graph的构建}
+    
+    \begin{block}{Edge-direction assignment}
+        \begin{enumerate}
+            \item 对于每一条边，$\pm 45^\circ$标成水平边，其他垂直边。
+                \begin{itemize}
+                    \item 同一个点的边按四方位（右、上、左、下）排好
+                    \item 同一个点不可能有连续两个方位里没有边
+                \end{itemize}
+            \item 对于每一条边，在保持上述性质的条件下，考虑两段cell的大小。
+                \begin{center}
+                    \includegraphics[width=0.25\textwidth]{../../pics/integrated-placement-and-routing-for-vlsi-layout-synthesis-and-optimization/critical_slope.png}
+                \end{center}
+            \item legalization: 保证每个点的四方位都有边
+                \quad\includegraphics[align=t,height=0.22\textheight]{../../pics/integrated-placement-and-routing-for-vlsi-layout-synthesis-and-optimization/ruld-legalization.png}
+        \end{enumerate}
+    \end{block}
+\end{frame}
+
+\note{
+    \begin{itemize}
+        \item legalization:
+            有几个patterns，按情况套用。
+            \begin{itemize}
+                \item 示例图的解释：
+                    D上面有个B有个C，A的左面是B右面是C，那么A也肯定在D上面。
+            \end{itemize}
+    \end{itemize}
+}
+
+\begin{frame}
+    \frametitle{2D Compaction Based on RULD Graphs}
+    
+    \begin{exampleblock}{the algorithm}
+        \footnotesize
+        \begin{algorithmic}[1]
+            \Procedure{2dCompact}{$r,t$}
+                \Comment $r$: 目标长宽比, $t$: 长宽比的容忍系数
+                \State orient $\gets$ HORIZONTAL
+                \Loop
+                    \Loop
+                        \State ratio $\gets$ \Call{AspectRatio}{}
+                        \If{ratio $\not\in [\frac{r}{1+t}, (1+t)r]$}
+                            \State break
+                        \EndIf
+                        \State \Call{SelectAndAdjust}{orient}
+                    \EndLoop
+                    \State \Call{EvalPlacement}{}
+                    \If{如果这次的结果比上次差}
+                        \State return 上次的结果
+                    \EndIf
+                    \State \Call{Flip}{orient}
+                \EndLoop
+            \EndProcedure
+        \end{algorithmic}
+    \end{exampleblock}
+\end{frame}
+
+\note{
+    \begin{itemize}
+        \item 每次优化一个方向
+        \item AspectRatio: 用水平和垂直方向上的critical path的长度除出来。
+        \item SelectAndAdjust从一个方向上的critical path里找一条边来调整，
+            使得另一个方向上的critical path增加最少。
+            \begin{itemize}
+                \item 调整的方法只有少数几种local patterns。
+                    不需要每次调整都重新算一遍全局RULD。
+                    局部改改就行。
+                    因此该算法很快。
+            \end{itemize}
+        \item EvalPlacement是对placement的度量，不同的阶段不一样。
+    \end{itemize}
+}
+
+\subsection{Initial placement}
+
+\begin{frame}
+    \frametitle{Initial placement}
+    
+    \begin{block}{整体框架}
+        \begin{enumerate}
+            \item 粗放
+                \begin{enumerate}
+                    \item Gauss-Seidel method on simple quadratic cost
+                    \item \color{gray}2D compaction based on RULD graph
+                \end{enumerate}
+            \color{gray}
+            \item 细调
+                \begin{enumerate}
+                    \color{gray}
+                    \item 考虑cell的几何形状
+                        \begin{enumerate}
+                            \color{gray}
+                            \item cell shifting
+                            \item cell orientation
+                        \end{enumerate}
+                    \item 2D compaction based on RULD graph
+                \end{enumerate}
+            \item 精修
+                \begin{enumerate}
+                    \color{gray}
+                    \item 精修HPWL
+                    \item 2D compaction based on RULD graph
+                \end{enumerate}
+        \end{enumerate}
+    \end{block}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Initial Placement}
+    
+    \begin{block}{Simple quadratic formulation}
+        \begin{align*}
+            F&=\frac{1}{2}\sum_{i,j\in\cells\cup\pads}c_{ij}((x_i-x_j)^2+(y_i-y_j)^2)
+            \\\hline
+            x_i^{(t+1)}-x_i^{(t)}&=\frac{1}{b_i}\sum_j c_{ij}(x_j^{(t)}-x_i^{(t)})
+            \\
+            b_i&=\sum_j c_{ij}
+        \end{align*}
+        \begin{itemize}
+            \item 整个算法的一次迭代的时间复杂度$O(cN)$。基本线性。
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+\note{
+    \begin{itemize}
+        \item $(x_i,y_i)$是cell i的中心点坐标。
+        \item 如果没有IO pads，这个公式会把所有cells堆到一起去。
+            所以，事先要把IO pads固定下来。
+            公式里最后几个$(x_i,y_i)$是IO pads的坐标，不能挪。
+        \item $c_{ij}$度量cell i和j之间的连接数。
+            但为了避免multiple-pin nets的影响过大，这个系数需要调整。
+        \item 一次迭代的时间复杂度里，$c$是平均连接数，$N$是节点数。通常$c$不会很大。
+    \end{itemize}
+}
+
+\subsection{1st refinement}
+
+\begin{frame}
+    \frametitle{1st refinement}
+    
+    \begin{block}{整体框架}
+        \begin{enumerate}
+            \item \color{gray}粗放
+                \begin{enumerate}
+                    \color{gray}
+                    \item Gauss-Seidel method on simple quadratic cost
+                    \item 2D compaction based on RULD graph
+                \end{enumerate}
+            \item 细调
+                \begin{enumerate}
+                    \item 考虑cell的几何形状
+                        \begin{enumerate}
+                            \item cell shifting
+                            \item cell orientation
+                        \end{enumerate}
+                    \color{gray}
+                    \item 2D compaction based on RULD graph
+                \end{enumerate}
+            \color{gray}
+            \item 精修
+                \begin{enumerate}
+                    \color{gray}
+                    \item 精修HPWL
+                    \item 2D compaction based on RULD graph
+                \end{enumerate}
+        \end{enumerate}
+    \end{block}
+\end{frame}
+
+\begin{frame}
+    \frametitle{1st Refinement}
+
+    \begin{block}{考虑macro cell的几何形状}
+        \begin{itemize}
+            \item macro cells的pins往往不在其中心。
+                \begin{itemize}
+                    \item pins可以建模成距离其中心的固定偏移。
+                \end{itemize}
+            \item macro cells的旋转与翻转
+                \begin{itemize}
+                    \item 可以利用quadratic formulation表现出的引力。
+                \end{itemize}
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+\begin{frame}
+    \frametitle{1st Refinement}
+
+    \begin{columns}
+        \begin{column}{0.47\textwidth}
+            \begin{exampleblock}{The algorithm}
+                \footnotesize
+                \begin{algorithmic}[1]
+                    \Loop
+                        \State \Call{CellOrient}{}
+                        \State \Call{CellShift}{}
+                        \State \Call{2dCompact}{}
+                        \If{\Call{Terminate?}{}}
+                            \State \Call{RestoreBest}{}
+                            \State break
+                        \Else
+                            \State \Call{SaveBest}{}
+                        \EndIf
+                    \EndLoop
+                \end{algorithmic}
+            \end{exampleblock}
+        \end{column}
+        \begin{column}{0.47\textwidth}
+            \begin{block}{控制的逻辑}
+                \begin{center}
+                    \includegraphics[width=\textwidth]{../../pics/integrated-placement-and-routing-for-vlsi-layout-synthesis-and-optimization/quad_cost.png}
+                \end{center}
+            \end{block}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+\note{
+    \begin{itemize}
+        \item CellOrient和CellShift总能改善cost，但2dCompact往往反之。
+            实验表明，当CellOrient和CellShift的结果和2dCompact的结果大幅收紧，再多跑的意义就不大了。
+    \end{itemize}
+}
+
+\begin{frame}
+    \frametitle{1st Refinement}
+
+    \begin{exampleblock}{The algorithm: cont.}
+        \footnotesize
+        \begin{algorithmic}[1]
+            \Procedure{CellShift}{}
+                \State init-hp-cost $\gets$ \Call{EvalHpwl}{}
+                \State first-try $\gets$ true
+                \Loop
+                    \State moves $\gets$ \Call{GaussSeidelMoves}{}
+                    \If{first-try}
+                        \State moves $\gets$ \Call{ShockMovesOnly}{moves}
+                        \Comment 改进2
+                        \State first-try $\gets$ false
+                    \EndIf
+                    \State \Call{MoveCells}{moves}
+                    \State new-hp-cost $\gets$ \Call{EvalHpwl}{}
+                    \If{new-hp-cost $<$ init-hp-cost $* 0.75$}
+                        \Comment 改进1
+                        \State break
+                    \EndIf
+                \EndLoop
+            \EndProcedure
+        \end{algorithmic}        
+    \end{exampleblock}
+\end{frame}
+
+\note{
+    \begin{itemize}
+        \item 改进1：防止过度优化浪费算力。
+            根据前面展示的实验的结果，compaction的结果可能大大高于cell shifting。
+            所以没必要在一轮迭代里面在illegal placement上花费太多算力。
+        \item 改进2：第一次只移动冲击巨大的moves。
+            这里“冲击巨大”的定义是：
+            对于cell i和j，
+            \begin{itemize}
+                \item 如果i和j在RULD graph中以一条水平边相连且$x_i^{(t)}<x_j^{(t)}$，则$x_i^{(t+1)}>x_j^{(t+1)}$；
+                \item 垂直边类似。
+            \end{itemize}
+            这里的考虑是
+            \begin{itemize}
+                \item 如果不破坏RULD graph，那么后面的compaction通常会把cell推回原来的位置（附近）。
+                \item 只有第一次的原因是：shock moves破坏了RULD graph，重建一遍太费事。
+            \end{itemize}
+    \end{itemize}
+}
+
+\subsection{2nd refinement}
+
+\begin{frame}
+    \frametitle{2nd refinement}
+    
+    \begin{block}{整体框架}
+        \begin{enumerate}
+            \color{gray}
+            \item 粗放
+                \begin{enumerate}
+                    \color{gray}
+                    \item Gauss-Seidel method on simple quadratic cost
+                    \item 2D compaction based on RULD graph
+                \end{enumerate}
+            \item 细调
+                \begin{enumerate}
+                    \color{gray}
+                    \item 考虑cell的几何形状
+                        \begin{enumerate}
+                            \color{gray}
+                            \item cell shifting
+                            \item cell orientation
+                        \end{enumerate}
+                    \item 2D compaction based on RULD graph
+                \end{enumerate}
+            \item 精修
+                \begin{enumerate}
+                    \item 精修HPWL
+                    \color{gray}
+                    \item 2D compaction based on RULD graph
+                \end{enumerate}
+        \end{enumerate}
+    \end{block}
+\end{frame}
+
+\begin{frame}
+    \frametitle{2nd Refinement}
+
+    \begin{exampleblock}{从quadratic cost换成HPWL}
+        \footnotesize
+        \begin{algorithmic}[1]
+            \For{循环三遍}
+                \State \Call{SwapNeighbours}{}
+                \State \Call{Orientate}{}
+                \State \Call{2dCompact}{}
+            \EndFor
+            \State 返回最后的结果
+        \end{algorithmic}
+    \end{exampleblock}
+\end{frame}
+
+\note{
+    \begin{itemize}
+        \item SwapNeighbours
+            \begin{itemize}
+                \item 对于每个cell，在其RULD graph四跳或六跳之内再找一个cell，交换。
+                    如果能改善HPWL，则保留。
+                \item 这个操作不会改变RULD graph。
+            \end{itemize}
+        \item Orientate
+            \begin{itemize}
+                \item 对于每个cell，原地尝试其8个方向，如果能改善HPWL则保留。
+                \item 这个操作也不会改变RULD graph。
+            \end{itemize}
+        \item HPWL是否比quadratic cost更优，学术界有争议。
+            HPWL实质是manhattan distance，而quadratic cost在优化Euclidean distance。
+            Harry认为后者优化出来的结果更接近正方形，这对routing有好处。
+    \end{itemize}
+}
+
+\end{document}

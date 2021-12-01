@@ -3,8 +3,7 @@ import sys
 sys.path.insert(0, os.path.abspath('.'))
 import sphinx_rtd_theme
 
-project = 'Xubuntu 20.04的配置笔记'
-copyright = '2020, Taoda'
+project = 'EDA物理设计学习笔记'
 author = 'Taoda'
 
 extensions = [
@@ -17,7 +16,8 @@ extensions = [
 autosectionlabel_prefix_document = True
 todo_include_todos = True
 templates_path = ['_templates']
-language = 'zh_CN'
+language = 'zh'
 exclude_patterns = []
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
+html_extra_path = ['_extra']
