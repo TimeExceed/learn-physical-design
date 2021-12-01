@@ -409,8 +409,9 @@ def runLuaLatex(env, tex, pdf):
     with open(tex) as fp:
         content = fp.read()
     for m in re.finditer('\\\\includegraphics.*?[{](.*?)[}]', content):
-        print(tex, 'depends on', m.group(1))
-        env.Depends(tex, m.group(1))
+        pic = env.File(m.group(1))
+        print(pdf, 'depends on', pic)
+        env.Depends(pdf, pic)
 
     pdfDir = op.dirname(pdf)
     aux = calcAuxDigest(tex, pdfDir)

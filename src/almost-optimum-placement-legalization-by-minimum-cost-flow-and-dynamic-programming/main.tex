@@ -1,0 +1,329 @@
+\documentclass[UTF8,a4paper]{ctexart}
+\usepackage[lmargin=2cm,rmargin=2cm,tmargin=2cm,bmargin=2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{minted}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{awesomebox}
+\usepackage{hyperref}
+
+\title{Almost Optimum Placement Legalization by Minimum Cost Flow and Dynamic Programming\\
+    读书笔记}
+\author{陶大}
+\date{Sep. 2021}
+
+\renewcommand{\emph}[1]{\textbf{#1}}
+\renewcommand{\leq}{\leqslant}
+\newcommand{\supp}[1]{\text{supp} ({#1})}
+\newcommand{\dem}[1]{\text{dem} ({#1})}
+\renewcommand{\atop}[2]{\genfrac{}{}{0pt}{}{#1}{#2}}
+\newcommand{\bal}{\text{bal}}
+\newcommand{\lack}{\text{lack}}
+\newtheorem{theorem}{Theorem}
+\newtheorem{definition}{Definition}
+
+\begin{document}
+\maketitle
+\tableofcontents
+
+\section{解决的问题}
+
+在单行std cell的条件下，高速地做到接近最优的detail placement。
+
+\section{步骤}
+
+\begin{minted}[autogobble,frame=single]{python}
+    assignment = assign每个cell到其中心所在的region
+    while assignment is illegal:
+        f = 构造图并计算最小费用最大流(assignment)
+        assignment = 将f实现成cell-region assignment
+    placement = 诱导(assignment)
+    postoptimize(placement)
+\end{minted}
+
+\section{最大流图}
+
+\begin{figure}
+    \begin{center}
+        \includegraphics[width=0.5\textwidth]{./concepts.png}    
+    \end{center}
+    \caption{Zone \& Region}
+\end{figure}
+
+\begin{definition}
+    \;
+    \begin{description}
+    \item[zone] 
+        一个zone是从blockade或边界到blockade或边界连续的一行。
+    \item[region]
+        一个zone可以继续被切分成多个regions。
+        论文里说 region 都是等宽的，是zone和chip-wide columns相交的方块。
+        但算法里似乎并不需要这一假设。
+    
+        论文里以 $A_i$ 代表region $i$，其宽度为 $w(A_i)$。
+        $C_i=\{c^i_1,\dots,c^i_k\}$ 为assign给该region的所有cells，从左往右一字排开。
+        其中 $c^i_j$ 的宽度是 $w(c^i_j)$。
+        并且简记 $w(C_i)=\sum_j w(c^i_j)$。
+    
+        \begin{noteblock}
+            region可以包含多个工艺要求的grids。
+            这样一方面可以减少需要处理的节点数量。
+            另外论文里假设任何cell最多只会和两个region有重叠（即跨过一次region-region边界）。
+            
+            所以，实现中需要考虑怎样确定region的宽度。
+            论文里没讲怎么做。
+        \end{noteblock}
+    \item[Soft boundary feasible, SB-feasible]
+        在一个assignment诱导的placement里，如果所有cells的中心都在其assign的region内，
+        则称此assignment为SB-feasible。
+    \item[Hard boundary feasible, HB-feasible]
+        在SB-feasible的基础上额外约束所有cells不跨region的边界。
+    
+        \begin{noteblock}
+            显然hard boundary的约束更强，会导致更多的cell移动。
+            这里不再展开如何在HB约束下如何构造最大流图。
+            关心其中细节的请去看论文。
+        \end{noteblock}
+    \item[Interval]
+        假设一个zone内从左往右有 $\{A_1,\dots,A_k\}$。
+        那么对于任意$1\leq \mu \leq \nu \leq k$，
+        定义Interval及其宽度为
+        \begin{align*}
+            A_{\mu,\nu} &=\{A_\mu,\dots,A_\nu\}\\
+            w(A_{\mu,\nu}) &=\sum_{j=\mu}^{\nu} w(A_j)
+        \end{align*}
+        而一个region可以视作退化的Interval。
+    \item[SB约束下的供应和需求]
+        对于任意Interval $A_{\mu,\nu}$，定义其供应为
+        \begin{align*}
+            s_{\mu,\nu} &:=\max\biggl\{%
+                0,\;%
+                \sum_{i=\mu}^{\nu}\bigl(w(C_i)-w(A_i)\bigr)%
+                -\frac{1}{2}\bigl(w(c^{\mu}_1)+w(c^{\nu}_{k_\nu})\bigr)%
+            \biggl\}
+            \\
+            \supp{A_{\mu,\nu}} &:=\max\biggl\{%
+                0,\;%
+                s_{\mu,\nu}%
+                -\sum_{\atop{\mu\leq\mu'\leq\nu'\leq\nu}{(\mu,\nu)\neq(\mu',\nu')}}\supp{A_{\mu',\nu'}}%
+            \biggr\}
+        \end{align*}
+        其中 $c^\mu_1$ 是指 region $A_\mu$ 里最左边的cell。
+        类似地， $c^\nu_{k_\nu}$ 是指 region $A_{\nu}$ 里最右边的一个cell。
+    
+        我们称 $A_{\mu,\nu}$ 是一个 \emph{供应interval}，如果 $\supp{A_{\mu,\nu}}>0$ 。
+        所谓供应，供应的是放不下的cells。
+        $s_{\mu,\nu}$定义了 \emph{interval的过载}，
+        意思是 $A_{\mu,\nu}$ 只能容纳这么多cells（以宽度计），
+        现在assign了这么多的cells
+        （因为SB constraints，左右两端的cells都只能算半个）。
+        \begin{itemize}
+        \item 一方面，可能一个interval过载而其中每一个subinterval都不过载。
+            比如，一个由两个regions组成的interval。
+            其中左region伸了半个cell到右region，而右region又没这么多的余地给它。
+            这种情况，由于SB constraints，两个region自身都没有过载，而整体的interval过载。
+        \item 另一方面，一个过载的interval可能是由于其中一个局部过载，
+            即，从这个局部挪走一个cell，可能一把interval都不过载了。
+            这个局面也不是我们想要的。
+            因此 $\supp{\cdot}$ 把子段的供应都扣除。
+        \end{itemize}
+        
+        类似地，我们定义 \emph{空载 $t(\cdot)$ 和需求 $\dem{\cdot}$}。
+        \begin{align*}
+            t_{\mu,\nu} &=\min\biggl\{%
+                0,\:%
+                \sum_{i=\mu}^{\nu}\bigl(w(C_i)-w(A_i)\bigr)%
+                +\frac{1}{2}\bigl(w(c^{\mu-1}_{k_{\mu-1}})+w(c^{\nu+1}_1)\bigr)
+            \biggr\}
+            \\
+            \dem{A_{\mu,\nu}} &=\min\biggl\{%
+                0,\;%
+                t_{\mu,\nu}%
+                -\sum_{\atop{\mu\leq\mu'\leq\nu'\leq\nu}{(\mu,\nu)\neq(\mu',\nu')}}\dem{A_{\mu',\nu'}}%
+            \biggr\}
+        \end{align*}
+    \item[Soft boundary minimum cost flow, SB-MCF]
+        构造一个图，其中节点
+        \begin{itemize}
+        \item 所有的interval都是节点（因此所有的region都是节点）。其中
+            \begin{itemize}
+            \item $\supp{\cdot}>0$ 称为供应节点
+            \item $\dem{\cdot}<0$ 称为需求节点
+            \end{itemize}
+        \item 增加 $s,t$ 两个虚节点。
+        \end{itemize}
+        以及边
+        \begin{itemize}
+        \item 对于相邻的两个regions $A_i,A_j$，任意 $c^i_\alpha\in A_i$，
+            从 $A_i$ 到 $A_j$ 拉一条有向边，
+            \begin{itemize}
+            \item 其capacity为 $w(c^i_\alpha)$
+            \item 其cost为 $\frac{\cdot}{w(c^i_\alpha)}$。
+                空穴的部分是将$c^i_\alpha$ 从 $A_i$ 的中心挪到 $A_j$ 的中心的线长差（后者减前者）。
+            \end{itemize}
+            \begin{noteblock}
+                论文里没讲什么是相邻。
+            \end{noteblock}
+        \item 从 $s$ 向所有供应节点 $A_{\mu,\nu}$ 拉一条有向边，
+            \begin{itemize}
+            \item 其capacity为 $\supp{A_{\mu,\nu}}$
+            \item 其cost为0
+            \end{itemize}
+            类似地，从所有需求节点向 $t$ 拉一条有向边。
+        \item 对于任意供应interval $A$ 和任意一个节点 $A'\subset A$，
+            拉一条从 $A$ 到 $A'$ 的有向边，其cost为0而capacity无限。
+    
+            类似地处理需求intervals。
+            \begin{noteblock}
+                从论文的描述来看，可以从非平凡interval到非平凡interval拉边。
+                但我没想到这样做的好处。
+            \end{noteblock}
+        \item 从 $t$ 拉有向边到所有的intervals，其cost为0而capacity无限。
+            \begin{noteblock}
+                我的理解，只有在边cost可能为负的情况下此设置才有意义。
+                如果不对初始assignment做任何假设，这是有可能的。
+                如果优化目标不是线长，这也是有可能的。
+            \end{noteblock}
+        \end{itemize}
+    \item[interior movement]
+        在SB约束下，移动一个interval两边的cell相比移动其他的cell情况更复杂。
+        我们将移动非两边的cell称为 interior movement。
+    \end{description}
+\end{definition}
+
+直观来讲，沿着最大流图的一条从$s$走向$t$的流，
+\begin{itemize}
+\item 如果其中一步从region $A_i$ 到相邻region $A_j$，意味着将一个cell从 $A_i$ 推到 $A_j$。
+\item 从$s$到供应节点 $A_i$意味着，$A_i$中可以有cell(s)挪走。
+\item 从非平凡interval到region走一步意味着，从该region挪走一个cell可以改善该interval的过载。
+\end{itemize}
+论文中讲以上直觉形式化成如下定理。
+
+\begin{theorem}
+    非平凡供应intervals的数量不会超过regions数量的一倍。
+    非平凡需求intervals的情况同样。
+\end{theorem}
+
+\begin{theorem}
+    令 $f$ 是一个SB-MCF的解。
+    如果通过interior movement可以恰好实现 $f$，那么该实现是一个 SB-feasible assignment。
+\end{theorem}
+
+\begin{theorem}
+    假设一个SB-MCF实例减少了一个供应量，且令 $f$ 是修改后的实例的一个解。
+    那么 $f$ 的任何通过interior movement的恰好实现都不是SB-feasible assignment。
+\end{theorem}
+
+\begin{theorem}
+    假设供应之和大于任何单个zone（$\max_{z\in\text{zones}}\{w(A_z)-w(C_z)\}$）。
+    减少SB-MCF实例的任意数量的需求，且$f$是修改后实例的任意最大流。
+    那么 $f$ 的任何通过interior movement的恰好实现都不是SB-feasible assignment。
+\end{theorem}
+
+\begin{theorem}
+    令$f$是一个SB-MCF的最优解。
+    如果$f$任意近似实现对于任意interval $A_{\mu,\nu}$，如果有
+    \begin{align*}
+        \bal(A_{\mu,\nu}) &:=\text{total width of leaving cells} - \text{total width of entering cells}\\
+        \bal(A_{\mu,\nu}) &\geq \sum_{i=\mu}^{\nu}\bigl(%
+            w(C_i)-w(A_i)%
+        \bigr)%
+        -\frac{1}{2}\bigl(%
+            w(c^{\mu}_1)+w(c^{\nu}_{k_\nu})
+        \bigr)%
+    \end{align*}
+    那么该近似实现最多将cells水平移动一个region。
+\end{theorem}
+
+\section{最大流图的实现}
+
+\begin{definition}
+    给定一张图$G$与其上一个流 $f$。
+    对于任意$v\in G$，其入边记为 $\delta^-(v)$，其出边记为 $\delta^+(v)$。
+    相应的流量 
+    \begin{align*}
+        f(\delta^-(v)) &:=\sum_{e\in\delta^-(v)}f(e)\\
+        f(\delta^+(v)) &:=\sum_{e\in\delta^+(v)}f(e)
+    \end{align*}
+\end{definition}
+
+整个算法从去除了intervals, $s$ and $t$的子图开始。
+\begin{enumerate}
+\item 从子图里挑选一个节点$v$，满足 $f(\delta^-(v))=0$ 且 $f(\delta^+(v))>0$。
+    设子图里$v$的相邻点为 $X$。
+\item 寻找一个partition $p$，
+    \begin{align*}
+        p_v:\;&C_v\to X\cup\{v\}\\
+        p_{x}:\;& C_{x}\to \{x,v\}\qquad\forall x\in X
+    \end{align*}
+    s.t.
+    \begin{align}
+        \sum_{y\in X\cup\{v\}}\sum_{\atop{c\in C_y}{p_y(c)=v}}w(c)
+        \:-\:
+        \sum_{c\in C_v}w(c)
+        \:+\:
+        f(\delta^+(v))
+        &\leq\lack(v)
+        \label{part:eq:v}
+        \\
+        \sum_{\atop{c\in C_v}{p_v(c)=x}}w(c)
+        \:-\:
+        \sum_{\atop{c\in C_x}{p_x(c)=v}}w(c)
+        \:-\:
+        f((v,x))
+        &\leq\text{lack(x)}\quad\forall x\in X
+        \label{part:eq:neighbour}
+    \end{align}
+    其中 $\lack(v)$ 是节点$v$可以额外接受的流量，即，
+    \[
+        \lack(v)=\begin{cases}
+            -\dem{v}-f((v,t)),
+            &\text{for all demand node }v
+            \\
+            0,
+            &\text{otherwise}
+        \end{cases}
+    \]
+    定义$p$的cost是其中移动的cells的cost之和。
+    那么寻找代价最小的 $p$ 类似一个0-1背包问题，可以用一个动态规划搞定。
+\item ~
+    \begin{itemize}
+    \item 如果找到了那么一个partition，则取用。
+    \item 否则，我们找到满足\ref{part:eq:v}并且violate \ref{part:eq:neighbour}最少的partition。
+        从每个violation节点$x$到$t$在子图里的最短路径一路增加$\lack$，直到满足\ref{part:eq:neighbour}。
+    \item 如果还是不行，我们找到violate \ref{part:eq:v}和\ref{part:eq:neighbour}最少的partition，
+        并进行上述修复。
+    \end{itemize}
+    按照该partition移动cells，并更新 $f$，将$v$的出边的流量降为0，并且从子图中移除 $v$。
+\end{enumerate}
+如果最终的结果并不SB feasible，则增大一倍region的width，再次迭代。
+
+\begin{noteblock}
+    有两点不理解
+    \begin{itemize}
+    \item $f(\delta^-(v))=0$意味着没有cell需要搬入$v$，那为何 $p$ 却允许如此做？
+    \item $p$ 的构造只考虑了相邻关系，而没有考虑流量。
+        是否意味着，$p$ 会沿着无流量的边移动cell呢？
+    \end{itemize}
+\end{noteblock}
+
+\section{Single-zone placement}
+
+即使给定一个zone内所有的cells，以最小化cost为目标来摆放，这个问题仍然NP-hard。
+因此我们进一步简化：假定其中所有cells的顺序不变。
+论文给了该问题的$O(n)$解法的引用。
+
+\section{Postoptimization}
+
+\begin{cautionblock}
+    to be filled
+\end{cautionblock}
+
+\section{Lower bounds}
+
+\begin{cautionblock}
+    to be filled
+\end{cautionblock}
+
+\end{document}

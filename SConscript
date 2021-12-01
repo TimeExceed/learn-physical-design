@@ -1,5 +1,5 @@
 # -*- python -*-
 Import('env')
 
-env.subDir('slides')
+env.subDir('src')
 
