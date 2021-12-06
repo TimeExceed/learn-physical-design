@@ -1,0 +1,191 @@
+\documentclass[UTF8,a4paper]{ctexart}
+\usepackage[lmargin=2cm,rmargin=2cm,tmargin=2cm,bmargin=2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{minted}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{awesomebox}
+\usepackage{tabu}
+\usepackage{subfig}
+\usepackage{hyperref}
+
+\title{Fence-Region-Aware Mixed-Height Standard Cell Legalization\\
+    读书笔记}
+\author{陶大}
+\date{Dec. 2021}
+
+\renewcommand{\emph}[1]{\textbf{#1}}
+\renewcommand{\leq}{\leqslant}
+\renewcommand{\atop}[2]{\genfrac{}{}{0pt}{}{#1}{#2}}
+\newtheorem{theorem}{Theorem}
+\newtheorem{definition}{Definition}
+
+\begin{document}
+\maketitle
+\tableofcontents
+
+\section{解决的问题}
+
+多行std cell的detail placement。
+
+\section{步骤}
+
+见图\ref{steps}。
+
+\begin{figure}
+    \begin{center}
+        \includegraphics[width=\textwidth]{./whole-picture.png}
+    \end{center}
+    \caption{步骤}        
+    \label{steps}
+\end{figure}
+
+\section{Pre-legalization}
+
+Global placement 有可能将cells放在不能放的区域。
+本步骤将错放的cells推到最近的可以放的区域，不考虑overlapping。
+
+\section{Cell arrangement}
+
+\begin{itemize}
+\item 对于每个cell，以global placement的结果为起点，用FRA-BFS算法找到最近合适的位置，放下。
+\item 实现中，先把多行cell放掉，再放单行cell。
+\item FRA-BFS算法只处理有限大小的领域，所以还是有可能有些cell找不到地方放。
+\end{itemize}
+
+\section{Local cell shifting}
+
+\begin{figure}
+    \begin{center}
+        \subfloat{%
+            \includegraphics[width=.5\textwidth]{local-cell-shifting-ab.png}%
+            \label{local-cell-shifting:a}}
+        \qquad
+        \subfloat{%
+            \includegraphics[width=.25\textwidth]{local-cell-shifting-d.png}%
+            \label{local-cell-shifting:b}}
+    \end{center}
+    \caption{Local cell shifting}
+    \label{local-cell-shifting}
+\end{figure}
+
+对于上一步骤没有放下的cell P，
+\begin{enumerate}
+\item 看P的一个领域（图\ref{local-cell-shifting:a} 左图）。
+    把跨过边界的cells认为不可移动（图\ref{local-cell-shifting:a}右图深色块），
+    其他cells认为可以移动（图\ref{local-cell-shifting:a}右图浅色块）。
+\item 把可移动块(a-f)先拿走。
+\item 把P放下。
+    再依次用FRA-BFS算法把a-f放下（论文中说按大小降序排列，OpenROAD实现成随意顺序）。
+    得到图\ref{local-cell-shifting:b}。
+\end{enumerate}
+但是可能global placement在某些区域的密度太高，以至于无法在有限领域内解决。
+
+\section{Corner weight move}
+
+\begin{cautionblock}
+    没看懂。
+    代码里没实现。
+\end{cautionblock}
+
+\section{Postoptimization}
+
+以cell-move和cell-swap为手段，以总错位值最小为优化目标，进行模拟退火。
+
+\begin{noteblock}
+    错位是指global placement放的位置是 $P$，legalization之后放在 $P'$。
+    那么错位值是 $\left|P'_x-P_x\right| + \left|P'_y-P_y\right|$。
+\end{noteblock}
+
+\begin{noteblock}
+    代码里没有实现。
+    仅实现了随机交换。
+
+    实现的代码也没有用起来。
+\end{noteblock}
+
+\subsection{Cell move}
+
+在前面legalization的过程中，一个cell被放置在位置 $P'$。
+在固定其他cells的位置的条件下，在 $P'$ 的领域里重新找个位置 $P''$。
+如果 $P''$ 改进了 $P'$ 的错位，则替换。
+
+\begin{noteblock}
+    论文里没有讲清楚进行此项优化的条件。
+    查代码，是指 $P''$ 距离 $P$ 足够近。
+\end{noteblock}
+
+\subsection{Cell swap}
+
+交换两个形状一样的cells。
+因为形状一样，所以不会改变layout。
+如果能减少整体的错位，就保留。
+
+\section{FRA-BFS算法}
+
+\begin{figure}
+    \begin{center}
+        \begin{minted}[autogobble]{python}
+            def fra_bfs(g, c, p):
+                '''
+                g: 已经放了一些cells的布局图
+                c: 准备放下的cell
+                p: 开始搜索的位置
+                '''
+                a = [] # 可以放下c的位置
+                s = INIT_WINDOW_SIZE
+                while True:
+                    if s超过阈值:
+                        return None
+                    h = 从g构造以p为中心s为范围的窗口
+                    for t in h内可以放置c的位置:
+                        a.append(t)
+                    if len(a) > 0:
+                        return a中距离p最近的位置t
+                    增大s
+        \end{minted}
+    \end{center}
+    \caption{FRA-BFS算法}
+    \label{fra-bfs}
+\end{figure}
+
+算法见\ref{fra-bfs}。
+\begin{itemize}
+\item 从g构造h的方法如图 \ref{local-cell-shifting:a}。
+\item 由于s一点一点增大，实际的效果就是由近及远一圈一圈找合适的位置。
+\item 把s的阈值去掉，可以处理全图。
+\end{itemize}
+
+\begin{noteblock}
+    代码里s是hard code的3。
+\end{noteblock}
+
+\section{评述}
+
+密度对算法的影响体现在两个方面。
+\begin{description}
+\item[速度的方面] 
+    如果密度不太高，那么在小领域就能把目标cell放下。
+    算法很快就能结束。
+    并且可以并行处理多个待放的cell，只要它们的领域不重叠。
+\item[效果的方面]
+    如果密度高，那么随机涨落之下，有些区域就是不足以放下所有global placement丢进去的cells。
+    \begin{itemize}
+    \item 论文说用 corner weight move 来解决。
+        一来没看懂，二来没代码。
+        不知道怎么搞。
+    \item 把FRA-BFS中s的阈值去掉，一个迭代内轮流使用cell arrangement和local cell shifting可以处理全图。
+        但这样有可能把一个cell推到非常远的位置。
+        想象一下两种做法：
+        \begin{enumerate}
+        \item 把一个cell丢到很远，其他cell待在原地。
+        \item 把cells一圈一圈往外推。
+        \end{enumerate}
+        很难绝对地说何者更优。
+        直观上似乎后者适应更多的designs。
+    \end{itemize}
+\item 直觉上，postoptimization并不能把前者修成后者。
+\end{description}
+
+\end{document}

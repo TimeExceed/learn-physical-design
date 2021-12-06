@@ -11,7 +11,7 @@
 \title{Almost Optimum Placement Legalization by Minimum Cost Flow and Dynamic Programming\\
     读书笔记}
 \author{陶大}
-\date{Sep. 2021}
+\date{Dec. 2021}
 
 \renewcommand{\emph}[1]{\textbf{#1}}
 \renewcommand{\leq}{\leqslant}
@@ -46,7 +46,7 @@
 
 \begin{figure}
     \begin{center}
-        \includegraphics[width=0.5\textwidth]{./concepts.png}    
+        \includegraphics[width=0.5\textwidth]{./concepts.png}
     \end{center}
     \caption{Zone \& Region}
 \end{figure}
@@ -54,23 +54,23 @@
 \begin{definition}
     \;
     \begin{description}
-    \item[zone] 
+    \item[zone]
         一个zone是从blockade或边界到blockade或边界连续的一行。
     \item[region]
         一个zone可以继续被切分成多个regions。
         论文里说 region 都是等宽的，是zone和chip-wide columns相交的方块。
         但算法里似乎并不需要这一假设。
-    
+
         论文里以 $A_i$ 代表region $i$，其宽度为 $w(A_i)$。
         $C_i=\{c^i_1,\dots,c^i_k\}$ 为assign给该region的所有cells，从左往右一字排开。
         其中 $c^i_j$ 的宽度是 $w(c^i_j)$。
         并且简记 $w(C_i)=\sum_j w(c^i_j)$。
-    
+
         \begin{noteblock}
             region可以包含多个工艺要求的grids。
             这样一方面可以减少需要处理的节点数量。
             另外论文里假设任何cell最多只会和两个region有重叠（即跨过一次region-region边界）。
-            
+
             所以，实现中需要考虑怎样确定region的宽度。
             论文里没讲怎么做。
         \end{noteblock}
@@ -79,7 +79,7 @@
         则称此assignment为SB-feasible。
     \item[Hard boundary feasible, HB-feasible]
         在SB-feasible的基础上额外约束所有cells不跨region的边界。
-    
+
         \begin{noteblock}
             显然hard boundary的约束更强，会导致更多的cell移动。
             这里不再展开如何在HB约束下如何构造最大流图。
@@ -111,7 +111,7 @@
         \end{align*}
         其中 $c^\mu_1$ 是指 region $A_\mu$ 里最左边的cell。
         类似地， $c^\nu_{k_\nu}$ 是指 region $A_{\nu}$ 里最右边的一个cell。
-    
+
         我们称 $A_{\mu,\nu}$ 是一个 \emph{供应interval}，如果 $\supp{A_{\mu,\nu}}>0$ 。
         所谓供应，供应的是放不下的cells。
         $s_{\mu,\nu}$定义了 \emph{interval的过载}，
@@ -128,7 +128,7 @@
             这个局面也不是我们想要的。
             因此 $\supp{\cdot}$ 把子段的供应都扣除。
         \end{itemize}
-        
+
         类似地，我们定义 \emph{空载 $t(\cdot)$ 和需求 $\dem{\cdot}$}。
         \begin{align*}
             t_{\mu,\nu} &=\min\biggl\{%
@@ -173,7 +173,7 @@
             类似地，从所有需求节点向 $t$ 拉一条有向边。
         \item 对于任意供应interval $A$ 和任意一个节点 $A'\subset A$，
             拉一条从 $A$ 到 $A'$ 的有向边，其cost为0而capacity无限。
-    
+
             类似地处理需求intervals。
             \begin{noteblock}
                 从论文的描述来看，可以从非平凡interval到非平凡interval拉边。
@@ -241,7 +241,7 @@
 \begin{definition}
     给定一张图$G$与其上一个流 $f$。
     对于任意$v\in G$，其入边记为 $\delta^-(v)$，其出边记为 $\delta^+(v)$。
-    相应的流量 
+    相应的流量
     \begin{align*}
         f(\delta^-(v)) &:=\sum_{e\in\delta^-(v)}f(e)\\
         f(\delta^+(v)) &:=\sum_{e\in\delta^+(v)}f(e)

@@ -3,3 +3,4 @@ Import('env')
 
 env.subDir('integrated-placement-and-routing-for-vlsi-layout-synthesis-and-optimization')
 env.subDir('almost-optimum-placement-legalization-by-minimum-cost-flow-and-dynamic-programming')
+env.subDir('fence-region-aware-mixed-height-standard-cell-legalization')
