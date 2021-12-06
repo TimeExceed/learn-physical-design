@@ -23,10 +23,4 @@ if __name__ == '__main__':
         [
             cwd.joinpath('CSD-92-689.pdf'),
             build_dir.joinpath('src/integrated-placement-and-routing-for-vlsi-layout-synthesis-and-optimization/chapter1-2.notes.pdf')])
-    copy_files(
-        paper_reading.joinpath('almost-optimum-placement-legalization-by-minimum-cost-flow-and-dynamic-programming'),
-        [cwd.joinpath('Almost Optimum Placement Legalization by Minimum Cost Flow and Dynamic Programming.pdf')])
-    copy_files(
-        paper_reading.joinpath('fence-region-aware-mixed-height-standard-cell-legalization'),
-        [cwd.joinpath('Fence-Region-Aware Mixed-Height Standard Cell Legalization.pdf')])
     sp.check_call(['sphinx-build', '-M', 'html', f'{docs_dir}', f'{docs_out}'])
