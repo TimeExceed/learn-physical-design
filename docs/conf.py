@@ -16,7 +16,6 @@ extensions = [
 autosectionlabel_prefix_document = True
 todo_include_todos = True
 templates_path = ['_templates']
-language = 'zh'
 exclude_patterns = []
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']

@@ -1,5 +1,5 @@
 # -*- python -*-
 Import('env')
 
-pdf = env.Latex('main.tex')
+pdf = env.latex('main.tex')
 env.Default(pdf)
